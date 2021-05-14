@@ -16,6 +16,7 @@ import reporter from "gatsby-cli/lib/reporter"
 import { globalTracer } from "opentracing"
 import JestWorker from "jest-worker"
 import { handleStalePageData } from "../utils/page-data"
+import { numWorkers } from "../utils/worker/pool"
 
 const tracer = globalTracer()
 
@@ -59,6 +60,20 @@ export async function bootstrap(
   await handleStalePageData()
 
   await rebuildSchemaWithSitePage(context)
+
+  if (process.env.GATSBY_BUILD_SCHEMA_IN_DIFF_PROC) {
+    const promises: Array<Promise<void>> = []
+    for (let i = 0; i < numWorkers; i++) {
+      promises.push(
+        context.workerPool.buildSchema({
+          workerNumber: i,
+          plugins: context.store.getState().flattenedPlugins,
+        })
+      )
+    }
+
+    await Promise.all(promises)
+  }
 
   await extractQueries(context)
 
